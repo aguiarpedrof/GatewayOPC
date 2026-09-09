@@ -1,0 +1,18 @@
+## Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio / VS Code
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vscode/
+
+## OPC UA Certificates & PKI (Runtime Generated)
+pki/
+*.log
+
