@@ -1,0 +1,29 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using GatewayOPC.Data;
+using GatewayOPC.Services;
+
+var builder = Host.CreateApplicationBuilder(args);
+
+// Configuração do DbContext do Entity Framework com PostgreSQL
+var connectionString = builder.Configuration.GetConnectionString("l2mConnection");
+builder.Services.AddDbContext<L2mContext>(options =>
+{
+    if (!string.IsNullOrEmpty(connectionString))
+    {
+        options.UseNpgsql(connectionString);
+    }
+});
+
+// Registro do Worker que gerencia o Servidor OPC UA
+builder.Services.AddHostedService<GatewayOpcWorker>();
+
+var host = builder.Build();
+
+Console.WriteLine("==========================================================");
+Console.WriteLine("🚀 GatewayOPC - Servidor Industrial OPC UA (.NET 10)");
+Console.WriteLine("==========================================================");
+
+await host.RunAsync();
