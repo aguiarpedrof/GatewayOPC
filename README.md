@@ -55,20 +55,31 @@ Root
              │     ├── NumeroTrackers (Leitura)
              │     ├── UltimaLeitura (Leitura)
              │     └── DescricaoStatus (Leitura)
-             └── Trackers
-                   └── Tracker_{id} ({eui})
-                         ├── InclinacaoAtual (Leitura)
-                         ├── InclinacaoAlvo (Leitura/Escrita)
-                         ├── Modo (Leitura/Escrita)
-                         ├── TensaoBateria (Leitura)
-                         ├── TensaoPainel (Leitura)
-                         ├── CorrenteMotor (Leitura)
-                         ├── CorrenteBateria (Leitura)
-                         ├── TemperaturaBateria (Leitura)
+             ├── Trackers
+             │     └── Tracker_{id} ({eui})
+             │           ├── InclinacaoAtual (Leitura)
+             │           ├── InclinacaoAlvo (Leitura/Escrita)
+             │           ├── Modo (Leitura/Escrita)
+             │           ├── TensaoBateria (Leitura)
+             │           ├── TensaoPainel (Leitura)
+             │           ├── CorrenteMotor (Leitura)
+             │           ├── CorrenteBateria (Leitura)
+             │           ├── TemperaturaBateria (Leitura)
+             │           ├── Status (Leitura)
+             │           ├── DescricaoStatus (Leitura)
+             │           └── UltimaLeitura (Leitura)
+             └── Anemometros
+                   └── Anemometro_{id} ({eui})
+                         ├── VelocidadeVento (Leitura)
+                         ├── DirecaoVento (Leitura)
+                         ├── Temperatura (Leitura)
+                         ├── Pressao (Leitura)
+                         ├── Umidade (Leitura)
                          ├── Status (Leitura)
                          ├── DescricaoStatus (Leitura)
                          └── UltimaLeitura (Leitura)
 ```
+
 
 ---
 
@@ -95,10 +106,21 @@ Root
     "ApplicationUri": "urn:localhost:GatewayOPC",
     "Port": 4840,
     "EndpointPath": "/GatewayOPC",
-    "UpdateIntervalMs": 5000
+    "UpdateIntervalMs": 2000,
+    "EnableSimulation": true
   }
 }
 ```
+
+### ☀️ Modo Simulador de Usina Solar (`EnableSimulation: true`)
+Para testes e demonstrações sem necessidade de hardware físico:
+- Gera dados dinâmicos em tempo real para **5 Trackers solares** e **2 Anemômetros**.
+- Simula a curva de rastreamento solar (inclinação de `-45°` Leste a `+45°` Oeste).
+- Simula telemetria elétrica (tensão de 38V a 42V, corrente de carga, temperatura da bateria).
+- Simula telemetria ambiental e dinâmica de vento (velocidade de 3 a 15 m/s, direção, pressão e umidade).
+- Responde a comandos de escrita (`Modo`, `TargetSlope`, `InclinacaoAlvo`) em tempo real.
+
+
 
 ---
 
