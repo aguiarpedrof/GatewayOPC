@@ -14,8 +14,10 @@ namespace GatewayOPC.OpcServer
         // Dicionários para manter referência direta aos nós criados no AddressSpace
         private readonly Dictionary<string, BaseDataVariableState> _variables = new();
         private readonly HashSet<int> _registeredTrackerIds = new();
+        private readonly HashSet<int> _registeredAnemometerIds = new();
         private readonly object _lock = new();
         private FolderState? _trackersFolder;
+        private FolderState? _anemometersFolder;
 
         // Evento disparado quando um cliente OPC UA escreve em uma variável
         public event Func<string, object, Task>? VariableWritten;
@@ -69,6 +71,9 @@ namespace GatewayOPC.OpcServer
 
                 // 3. Cria pasta para os Trackers
                 _trackersFolder = CreateFolder(rootFolder, "Trackers", "Trackers");
+
+                // 4. Cria pasta para os Anemômetros
+                _anemometersFolder = CreateFolder(rootFolder, "Anemometros", "Anemometros");
 
                 AddRootNotifier(rootFolder);
             }
@@ -175,8 +180,25 @@ namespace GatewayOPC.OpcServer
             _registeredTrackerIds.Add(trackerId);
         }
 
+        private void CreateAnemometerNodes(FolderState parent, int anemometerId, string eui)
+        {
+            string prefix = $"Anemometro_{anemometerId}";
+            var anemometerFolder = CreateFolder(parent, $"{prefix}_Folder", $"Anemometro_{anemometerId} ({eui})");
+
+            CreateVariable(anemometerFolder, $"{prefix}_VelocidadeVento", "VelocidadeVento", DataTypeIds.Float, ValueRanks.Scalar, 0.0f);
+            CreateVariable(anemometerFolder, $"{prefix}_DirecaoVento", "DirecaoVento", DataTypeIds.Float, ValueRanks.Scalar, 0.0f);
+            CreateVariable(anemometerFolder, $"{prefix}_Temperatura", "Temperatura", DataTypeIds.Float, ValueRanks.Scalar, 0.0f);
+            CreateVariable(anemometerFolder, $"{prefix}_Pressao", "Pressao", DataTypeIds.Float, ValueRanks.Scalar, 0.0f);
+            CreateVariable(anemometerFolder, $"{prefix}_Umidade", "Umidade", DataTypeIds.Int16, ValueRanks.Scalar, (short)0);
+            CreateVariable(anemometerFolder, $"{prefix}_Status", "Status", DataTypeIds.Int16, ValueRanks.Scalar, (short)0);
+            CreateVariable(anemometerFolder, $"{prefix}_DescricaoStatus", "DescricaoStatus", DataTypeIds.String, ValueRanks.Scalar, "Normal");
+            CreateVariable(anemometerFolder, $"{prefix}_UltimaLeitura", "UltimaLeitura", DataTypeIds.DateTime, ValueRanks.Scalar, DateTime.UtcNow);
+
+            _registeredAnemometerIds.Add(anemometerId);
+        }
+
         // Método chamado pelo Worker para atualizar dados em tempo real no AddressSpace
-        public void UpdateData(Gateway? gateway, IEnumerable<Tracker>? trackers)
+        public void UpdateData(Gateway? gateway, IEnumerable<Tracker>? trackers, IEnumerable<Anemometro>? anemometros = null)
         {
             lock (_lock)
             {
@@ -212,6 +234,29 @@ namespace GatewayOPC.OpcServer
                         UpdateVariableValue($"{prefix}_Status", tracker.status ?? (short)0);
                         UpdateVariableValue($"{prefix}_DescricaoStatus", tracker.descricaoStatus);
                         UpdateVariableValue($"{prefix}_UltimaLeitura", tracker.leitura ?? DateTime.UtcNow);
+                    }
+                }
+
+                if (anemometros != null && _anemometersFolder != null)
+                {
+                    foreach (var anemometro in anemometros)
+                    {
+                        // Se o anemômetro ainda não tem nós criados no AddressSpace, cria agora
+                        if (!_registeredAnemometerIds.Contains(anemometro.id))
+                        {
+                            CreateAnemometerNodes(_anemometersFolder, anemometro.id, anemometro.eui ?? $"ID_{anemometro.id}");
+                        }
+
+                        string prefix = $"Anemometro_{anemometro.id}";
+                        UpdateVariableValue($"{prefix}_VelocidadeVento", anemometro.velocidade_vento ?? 0.0f);
+                        UpdateVariableValue($"{prefix}_DirecaoVento", anemometro.direcao_vento ?? 0.0f);
+                        UpdateVariableValue($"{prefix}_Temperatura", anemometro.temperatura ?? 0.0f);
+                        UpdateVariableValue($"{prefix}_Pressao", anemometro.pressao ?? 0.0f);
+                        UpdateVariableValue($"{prefix}_Umidade", anemometro.umidade ?? (short)0);
+                        UpdateVariableValue($"{prefix}_Status", anemometro.status ?? (short)0);
+                        string descStatus = anemometro.status == 0 ? "Normal" : "Erro";
+                        UpdateVariableValue($"{prefix}_DescricaoStatus", descStatus);
+                        UpdateVariableValue($"{prefix}_UltimaLeitura", anemometro.leitura ?? DateTime.UtcNow);
                     }
                 }
             }
