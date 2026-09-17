@@ -20,6 +20,7 @@ namespace GatewayOPC.Services
         private readonly IServiceScopeFactory _scopeFactory;
         private GatewayOpcServer? _opcServer;
         private ApplicationInstance? _application;
+        private SolarPlantSimulator? _simulator;
 
         public GatewayOpcWorker(
             ILogger<GatewayOpcWorker> logger,
@@ -40,12 +41,19 @@ namespace GatewayOPC.Services
                 string appUri = _configuration.GetValue<string>("OpcUaServer:ApplicationUri") ?? "urn:localhost:GatewayOPC";
                 int port = _configuration.GetValue<int>("OpcUaServer:Port", 4840);
                 string endpointPath = _configuration.GetValue<string>("OpcUaServer:EndpointPath") ?? "/GatewayOPC";
-                int intervalMs = _configuration.GetValue<int>("OpcUaServer:UpdateIntervalMs", 5000);
+                int intervalMs = _configuration.GetValue<int>("OpcUaServer:UpdateIntervalMs", 2000);
+                bool enableSimulation = _configuration.GetValue<bool>("OpcUaServer:EnableSimulation", false);
 
                 _logger.LogInformation("==================================================");
                 _logger.LogInformation("Iniciando Servidor OPC UA: {ServerName}", serverName);
                 _logger.LogInformation("Endpoint: opc.tcp://0.0.0.0:{Port}{EndpointPath}", port, endpointPath);
+                _logger.LogInformation("Modo Simulador de Usina Solar: {Status}", enableSimulation ? "ATIVADO (5 Trackers + 2 Anemômetros)" : "DESATIVADO (Apenas Banco)");
                 _logger.LogInformation("==================================================");
+
+                if (enableSimulation)
+                {
+                    _simulator = new SolarPlantSimulator();
+                }
 
                 // Criação da configuração OPC UA oficial
                 var opcConfig = await OpcServerConfig.CreateAsync(appName, appUri, port, endpointPath);
@@ -65,36 +73,49 @@ namespace GatewayOPC.Services
 
                 _logger.LogInformation("Servidor OPC UA iniciado e aguardando conexoes de clientes (UaExpert / TMS Server)!");
 
-                // Handler para escrita de variáveis (Comandos vindos do cliente OPC UA para o Banco)
+                // Handler para escrita de variáveis (Comandos vindos do cliente OPC UA)
                 if (_opcServer.NodeManager != null)
                 {
                     _opcServer.NodeManager.VariableWritten += HandleVariableWrittenAsync;
                 }
 
-                // Loop de polling do banco de dados para sincronização das variáveis OPC UA
+                // Loop de sincronização periódica (Simulador / Banco de Dados)
                 while (!stoppingToken.IsCancellationRequested)
                 {
                     try
                     {
-                        using var scope = _scopeFactory.CreateScope();
-                        var dbContext = scope.ServiceProvider.GetRequiredService<L2mContext>();
-
-                        // Consulta dados mais recentes do PostgreSQL
-                        var gateway = await dbContext.Gateways.AsNoTracking().OrderBy(g => g.id).FirstOrDefaultAsync(stoppingToken);
-                        var trackers = await dbContext.Trackers.AsNoTracking().OrderBy(t => t.id).ToListAsync(stoppingToken);
-
-
-                        if (_opcServer.NodeManager != null)
+                        if (enableSimulation && _simulator != null)
                         {
-                            _opcServer.NodeManager.UpdateData(gateway, trackers);
-                        }
+                            var (simGateway, simTrackers, simAnemometers) = _simulator.Step();
+                            if (_opcServer.NodeManager != null)
+                            {
+                                _opcServer.NodeManager.UpdateData(simGateway, simTrackers, simAnemometers);
+                            }
 
-                        _logger.LogDebug("Dados sincronizados com o banco local: Gateway={GatewayFound}, Trackers={Count}",
-                            gateway != null, trackers.Count);
+                            _logger.LogDebug("Telemetria simulada atualizada: Inclinacao Alvo={Slope}°, Trackers={Count}, Anemometros={AnemoCount}",
+                                simGateway.target_slope, simTrackers.Count, simAnemometers.Count);
+                        }
+                        else
+                        {
+                            using var scope = _scopeFactory.CreateScope();
+                            var dbContext = scope.ServiceProvider.GetRequiredService<L2mContext>();
+
+                            var gateway = await dbContext.Gateways.AsNoTracking().OrderBy(g => g.id).FirstOrDefaultAsync(stoppingToken);
+                            var trackers = await dbContext.Trackers.AsNoTracking().OrderBy(t => t.id).ToListAsync(stoppingToken);
+                            var anemometros = await dbContext.Anemometros.AsNoTracking().OrderBy(a => a.id).ToListAsync(stoppingToken);
+
+                            if (_opcServer.NodeManager != null)
+                            {
+                                _opcServer.NodeManager.UpdateData(gateway, trackers, anemometros);
+                            }
+
+                            _logger.LogDebug("Dados sincronizados com o banco local: Gateway={GatewayFound}, Trackers={Count}, Anemometros={AnemoCount}",
+                                gateway != null, trackers.Count, anemometros.Count);
+                        }
                     }
                     catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
                     {
-                        _logger.LogWarning("Aviso ao sincronizar com banco de dados local: {Message}", ex.Message);
+                        _logger.LogWarning("Aviso na atualizacao de dados: {Message}", ex.Message);
                     }
 
                     await Task.Delay(intervalMs, stoppingToken);
@@ -119,12 +140,15 @@ namespace GatewayOPC.Services
         {
             try
             {
-                _logger.LogInformation("Comando OPC UA recebido! Variavel: {NodeKey}, Novo Valor: {Value}", nodeKey, value);
+                _logger.LogInformation("🎯 Comando OPC UA recebido! Variavel: {NodeKey}, Novo Valor: {Value}", nodeKey, value);
 
+                // Aplica comando no simulador em tempo real se ativo
+                _simulator?.ApplyCommand(nodeKey, value);
+
+                // Grava no banco de dados local via Entity Framework
                 using var scope = _scopeFactory.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<L2mContext>();
 
-                // Exemplo de escrita no banco: Modo do Gateway
                 if (nodeKey == "Gateway_Modo" && short.TryParse(value.ToString(), out short novoModo))
                 {
                     var gw = await dbContext.Gateways.FirstOrDefaultAsync();
@@ -132,10 +156,9 @@ namespace GatewayOPC.Services
                     {
                         gw.modo = novoModo;
                         await dbContext.SaveChangesAsync();
-                        _logger.LogInformation("Modo do Gateway atualizado no banco para {Modo}", novoModo);
+                        _logger.LogInformation("Modo do Gateway atualizado no banco PostgreSQL para {Modo}", novoModo);
                     }
                 }
-                // Exemplo de escrita no banco: Target Slope do Gateway
                 else if (nodeKey == "Gateway_TargetSlope" && float.TryParse(value.ToString(), out float targetSlope))
                 {
                     var gw = await dbContext.Gateways.FirstOrDefaultAsync();
@@ -143,10 +166,9 @@ namespace GatewayOPC.Services
                     {
                         gw.target_slope = targetSlope;
                         await dbContext.SaveChangesAsync();
-                        _logger.LogInformation("TargetSlope do Gateway atualizado no banco para {Slope}", targetSlope);
+                        _logger.LogInformation("TargetSlope do Gateway atualizado no banco PostgreSQL para {Slope}°", targetSlope);
                     }
                 }
-                // Exemplo de escrita no banco: Inclinacao Alvo de Tracker especifico
                 else if (nodeKey.StartsWith("Tracker_") && nodeKey.EndsWith("_InclinacaoAlvo"))
                 {
                     var parts = nodeKey.Split('_');
@@ -157,7 +179,7 @@ namespace GatewayOPC.Services
                         {
                             tracker.inclinacao_alvo = inclinacaoAlvo;
                             await dbContext.SaveChangesAsync();
-                            _logger.LogInformation("InclinacaoAlvo do Tracker {Id} atualizada no banco para {Inclinacao}", trackerId, inclinacaoAlvo);
+                            _logger.LogInformation("InclinacaoAlvo do Tracker {Id} atualizada no banco para {Inclinacao}°", trackerId, inclinacaoAlvo);
                         }
                     }
                 }
