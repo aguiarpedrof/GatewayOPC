@@ -71,11 +71,14 @@ namespace GatewayOPC.OpcServer
 
                 // 3. Cria pasta para os Trackers
                 _trackersFolder = CreateFolder(rootFolder, "Trackers", "Trackers");
+                CreateTrackerNodes(_trackersFolder, 1, "TRACKER_01");
 
                 // 4. Cria pasta para os Anemômetros
                 _anemometersFolder = CreateFolder(rootFolder, "Anemometros", "Anemometros");
+                CreateAnemometerNodes(_anemometersFolder, 1, "ANEMOMETRO_01");
 
                 AddRootNotifier(rootFolder);
+
             }
         }
 
