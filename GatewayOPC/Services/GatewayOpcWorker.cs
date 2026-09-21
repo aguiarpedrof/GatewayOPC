@@ -43,7 +43,9 @@ namespace GatewayOPC.Services
                 {
                     var initialDbContext = initialScope.ServiceProvider.GetRequiredService<L2mContext>();
                     await _dbHealthService.LogDatabaseStatusAsync(initialDbContext, stoppingToken);
+                    await DatabaseVerificationRunner.RunVerificationAsync(initialDbContext, stoppingToken);
                 }
+
 
                 string serverName = _configuration.GetValue<string>("OpcUaServer:ServerName") ?? "GatewayOPC Server";
 
