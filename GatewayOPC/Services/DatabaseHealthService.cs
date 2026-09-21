@@ -30,12 +30,16 @@ namespace GatewayOPC.Services
                 var totalGateways = await dbContext.Gateways.CountAsync(cancellationToken);
                 var totalTrackers = await dbContext.Trackers.CountAsync(cancellationToken);
                 var totalAnemometros = await dbContext.Anemometros.CountAsync(cancellationToken);
+                var totalTrackerHist = await dbContext.Tracker_historicos.CountAsync(cancellationToken);
+                var totalAnemoHist = await dbContext.Anemometro_historicos.CountAsync(cancellationToken);
 
                 _logger.LogInformation("==========================================================");
                 _logger.LogInformation("📦 Conexão PostgreSQL Verificada com Sucesso:");
                 _logger.LogInformation("   • Gateways Cadastrados: {Count}", totalGateways);
                 _logger.LogInformation("   • Trackers Cadastrados: {Count}", totalTrackers);
                 _logger.LogInformation("   • Anemômetros Cadastrados: {Count}", totalAnemometros);
+                _logger.LogInformation("   • Histórico Trackers: {Count} registros", totalTrackerHist);
+                _logger.LogInformation("   • Histórico Anemômetros: {Count} registros", totalAnemoHist);
                 _logger.LogInformation("==========================================================");
             }
             catch (Exception ex)

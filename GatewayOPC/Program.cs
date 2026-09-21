@@ -15,18 +15,6 @@ builder.Services.AddDbContext<L2mContext>(options =>
     if (!string.IsNullOrEmpty(connectionString))
     {
         options.UseNpgsql(connectionString);
-
-        // Habilita a exibição dos comandos SQL reais gerados pelo Entity Framework Core no console
-        options.LogTo(message =>
-        {
-            if (message.Contains("SELECT") || message.Contains("UPDATE") || message.Contains("INSERT"))
-            {
-                Console.ForegroundColor = ConsoleColor.DarkCyan;
-                Console.WriteLine($"[SQL Query] {message.Trim()}");
-                Console.ResetColor();
-            }
-        }, LogLevel.Information);
-        options.EnableSensitiveDataLogging();
     }
 });
 

@@ -116,13 +116,52 @@ namespace GatewayOPC.Services
                             var trackers = await dbContext.Trackers.AsNoTracking().OrderBy(t => t.id).ToListAsync(stoppingToken);
                             var anemometros = await dbContext.Anemometros.AsNoTracking().OrderBy(a => a.id).ToListAsync(stoppingToken);
 
+                            // Consulta histórico de trackers
+                            var trackerHistories = await dbContext.Tracker_historicos
+                                .AsNoTracking()
+                                .OrderByDescending(h => h.leitura)
+                                .Take(100)
+                                .ToListAsync(stoppingToken);
+
+                            var latestTrackerHistories = trackerHistories
+                                .GroupBy(h => h.id)
+                                .ToDictionary(g => g.Key, g => g.First());
+
+                            var trackerHistoryCounts = await dbContext.Tracker_historicos
+                                .GroupBy(h => h.id)
+                                .Select(g => new { g.Key, Count = g.Count() })
+                                .ToDictionaryAsync(x => x.Key, x => x.Count, stoppingToken);
+
+                            // Consulta histórico de anemômetros
+                            var anemoHistories = await dbContext.Anemometro_historicos
+                                .AsNoTracking()
+                                .OrderByDescending(h => h.leitura)
+                                .Take(50)
+                                .ToListAsync(stoppingToken);
+
+                            var latestAnemoHistories = anemoHistories
+                                .GroupBy(h => h.id)
+                                .ToDictionary(g => g.Key, g => g.First());
+
+                            var anemoHistoryCounts = await dbContext.Anemometro_historicos
+                                .GroupBy(h => h.id)
+                                .Select(g => new { g.Key, Count = g.Count() })
+                                .ToDictionaryAsync(x => x.Key, x => x.Count, stoppingToken);
+
                             if (_opcServer.NodeManager != null)
                             {
-                                _opcServer.NodeManager.UpdateData(gateway, trackers, anemometros);
+                                _opcServer.NodeManager.UpdateData(
+                                    gateway, 
+                                    trackers, 
+                                    anemometros,
+                                    latestTrackerHistories,
+                                    trackerHistoryCounts,
+                                    latestAnemoHistories,
+                                    anemoHistoryCounts);
                             }
 
-                            _logger.LogInformation("🔄 PostgreSQL Sincronizado: Gateway ID={GatewayId} (TargetSlope={Slope}°, Modo={Modo}), Trackers={TrackersCount}, Anemometros={AnemoCount}",
-                                gateway?.id, gateway?.target_slope, gateway?.modo, trackers.Count, anemometros.Count);
+                            _logger.LogInformation("🔄 PostgreSQL Sincronizado: Gateway ID={GatewayId} (TargetSlope={Slope}°, Modo={Modo}), Trackers={TrackersCount}, Anemometros={AnemoCount}, HistTrackers={HistTrackers}, HistAnemo={HistAnemo}",
+                                gateway?.id, gateway?.target_slope, gateway?.modo, trackers.Count, anemometros.Count, trackerHistories.Count, anemoHistories.Count);
                         }
 
                     }
@@ -193,6 +232,20 @@ namespace GatewayOPC.Services
                             tracker.inclinacao_alvo = inclinacaoAlvo;
                             await dbContext.SaveChangesAsync();
                             _logger.LogInformation("InclinacaoAlvo do Tracker {Id} atualizada no banco para {Inclinacao}°", trackerId, inclinacaoAlvo);
+                        }
+                    }
+                }
+                else if (nodeKey.StartsWith("Tracker_") && nodeKey.EndsWith("_Modo"))
+                {
+                    var parts = nodeKey.Split('_');
+                    if (parts.Length >= 3 && int.TryParse(parts[1], out int trackerId) && short.TryParse(value.ToString(), out short novoTrackerModo))
+                    {
+                        var tracker = await dbContext.Trackers.FirstOrDefaultAsync(t => t.id == trackerId);
+                        if (tracker != null)
+                        {
+                            tracker.modo = novoTrackerModo;
+                            await dbContext.SaveChangesAsync();
+                            _logger.LogInformation("Modo do Tracker {Id} atualizado no banco para {Modo}", trackerId, novoTrackerModo);
                         }
                     }
                 }

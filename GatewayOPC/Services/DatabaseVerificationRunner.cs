@@ -40,6 +40,11 @@ namespace GatewayOPC.Services
             {
                 Console.WriteLine($"   • Anemômetro ID: {a.id} | EUI: {a.eui} | Vento: {a.velocidade_vento} m/s | Direção: {a.direcao_vento}° | Temp: {a.temperatura}°C | Leitura: {a.leitura}");
             }
+
+            // 4. Históricos (Tracker e Anemômetro)
+            var trackerHistCount = await dbContext.Tracker_historicos.CountAsync(cancellationToken);
+            var anemoHistCount = await dbContext.Anemometro_historicos.CountAsync(cancellationToken);
+            Console.WriteLine($"[Histórico] Registros no PostgreSQL: {trackerHistCount} de Trackers | {anemoHistCount} de Anemômetros");
             Console.WriteLine("----------------------------------------------------------");
         }
     }
