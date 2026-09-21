@@ -155,3 +155,77 @@ Utilize qualquer cliente OPC UA padrão da indústria (ex: **UaExpert** ou **Pro
 - **Endpoint URL**: `opc.tcp://localhost:4840/GatewayOPC`
 - **Security Policy**: `None` ou `Basic256Sha256`
 - **Authentication**: `Anonymous`
+
+---
+
+## 🗄️ Integração com Banco de Dados e Tradução SQL (LINQ to Entities)
+
+O **GatewayOPC** utiliza o **Entity Framework Core 10** como Object-Relational Mapper (ORM). Isso significa que, em vez de escrever strings SQL puras espalhadas pelo código, utilizamos expressões tipadas em C# (LINQ), que o provedor `Npgsql` traduz automaticamente para SQL nativo do PostgreSQL em tempo de execução:
+
+### 1. Consulta do Gateway:
+- **Código C# (LINQ):**
+  ```csharp
+  var gateway = await dbContext.Gateways.AsNoTracking().OrderBy(g => g.id).FirstOrDefaultAsync();
+  ```
+- **SQL Gerado pelo EF Core:**
+  ```sql
+  SELECT g.id, g.applicationid, g.ativo, g.atmosrefract, g.automatico, g.axis_missalign, 
+         g.azmrotation, g.cleaning_slope, g.deltat, g.deltaut1, g.elevation, g.eui, 
+         g.id_subcampo, g.id_usuario, g.ip, g.latitude, g.leitura, g.longitude, 
+         g.max_slope_east, g.max_slope_west, g.modo, g.night_slope, g.numero_trackers, 
+         g.porta, g.restore_time, g.safe_position_dal_e, g.safe_position_dal_w, 
+         g.safe_position_stow, g.senha, g.slope, g.status, g.target_slope, 
+         g.trackers_tracking_state, g.usuario, g.vdal, g.vstow
+  FROM tracker.gateway AS g
+  ORDER BY g.id
+  LIMIT 1;
+  ```
+
+### 2. Consulta dos Trackers:
+- **Código C# (LINQ):**
+  ```csharp
+  var trackers = await dbContext.Trackers.AsNoTracking().OrderBy(t => t.id).ToListAsync();
+  ```
+- **SQL Gerado pelo EF Core:**
+  ```sql
+  SELECT t.id, t.installation_azimuth, t.backtracking_distance, t.corrente_bateria, 
+         t.corrente_motor, t.corrente_painel, t.erro, t.eui, t.gateway_id, 
+         t.inclinacao_alvo, t.inclinacao_atual, t.inverter, t.latitude, t.leitura, 
+         t.longitude, t.modo, t.module_width, t.pitch, t.rssi, t.slope_east, 
+         t.slope_west, t.snr, t.soc, t.status, t.temperatura_bateria, 
+         t.temperatura_painel, t.tensao_bateria, t.tensao_painel, t.tipo_movimento, 
+         t.umidade_bateria
+  FROM tracker.tracker AS t
+  ORDER BY t.id;
+  ```
+
+### 3. Consulta dos Anemômetros:
+- **Código C# (LINQ):**
+  ```csharp
+  var anemometros = await dbContext.Anemometros.AsNoTracking().OrderBy(a => a.id).ToListAsync();
+  ```
+- **SQL Gerado pelo EF Core:**
+  ```sql
+  SELECT a.id, a.ativo, a.direcao_vento, a.eui, a.holding, a.id_subcampo, 
+         a.id_usuario, a.ip, a.latitude, a.leitura, a.longitude, a.periodo_coleta, 
+         a.porta, a.pressao, a.registrador_direcao, a.registrador_pressao, 
+         a.registrador_temperatura, a.registrador_umidade, a.registrador_velocidade, 
+         a.status, a.temperatura, a.umidade, a.velocidade_vento
+  FROM tracker.anemometro AS a
+  ORDER BY a.id;
+  ```
+
+### 4. Gravação de Comandos (OPC UA -> PostgreSQL):
+- **Código C#:**
+  ```csharp
+  var gw = await dbContext.Gateways.FirstOrDefaultAsync();
+  gw.modo = novoModo;
+  await dbContext.SaveChangesAsync();
+  ```
+- **SQL Gerado pelo EF Core:**
+  ```sql
+  UPDATE tracker.gateway 
+  SET modo = @novoModo 
+  WHERE id = @id;
+  ```
+
