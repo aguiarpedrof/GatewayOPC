@@ -119,9 +119,10 @@ namespace GatewayOPC.Services
                                 _opcServer.NodeManager.UpdateData(gateway, trackers, anemometros);
                             }
 
-                            _logger.LogDebug("Dados sincronizados com o banco local: Gateway={GatewayFound}, Trackers={Count}, Anemometros={AnemoCount}",
-                                gateway != null, trackers.Count, anemometros.Count);
+                            _logger.LogInformation("🔄 PostgreSQL Sincronizado: Gateway ID={GatewayId} (TargetSlope={Slope}°, Modo={Modo}), Trackers={TrackersCount}, Anemometros={AnemoCount}",
+                                gateway?.id, gateway?.target_slope, gateway?.modo, trackers.Count, anemometros.Count);
                         }
+
                     }
                     catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
                     {
