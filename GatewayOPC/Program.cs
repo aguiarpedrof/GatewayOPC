@@ -30,8 +30,10 @@ builder.Services.AddDbContext<L2mContext>(options =>
     }
 });
 
-// Registro do Worker que gerencia o Servidor OPC UA
+// Registro dos serviços
+builder.Services.AddSingleton<DatabaseHealthService>();
 builder.Services.AddHostedService<GatewayOpcWorker>();
+
 
 var host = builder.Build();
 

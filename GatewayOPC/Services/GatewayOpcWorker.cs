@@ -18,6 +18,7 @@ namespace GatewayOPC.Services
         private readonly ILogger<GatewayOpcWorker> _logger;
         private readonly IConfiguration _configuration;
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly DatabaseHealthService _dbHealthService;
         private GatewayOpcServer? _opcServer;
         private ApplicationInstance? _application;
         private SolarPlantSimulator? _simulator;
@@ -25,18 +26,27 @@ namespace GatewayOPC.Services
         public GatewayOpcWorker(
             ILogger<GatewayOpcWorker> logger,
             IConfiguration configuration,
-            IServiceScopeFactory scopeFactory)
+            IServiceScopeFactory scopeFactory,
+            DatabaseHealthService dbHealthService)
         {
             _logger = logger;
             _configuration = configuration;
             _scopeFactory = scopeFactory;
+            _dbHealthService = dbHealthService;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             try
             {
+                using (var initialScope = _scopeFactory.CreateScope())
+                {
+                    var initialDbContext = initialScope.ServiceProvider.GetRequiredService<L2mContext>();
+                    await _dbHealthService.LogDatabaseStatusAsync(initialDbContext, stoppingToken);
+                }
+
                 string serverName = _configuration.GetValue<string>("OpcUaServer:ServerName") ?? "GatewayOPC Server";
+
                 string appName = _configuration.GetValue<string>("OpcUaServer:ApplicationName") ?? "GatewayOPC";
                 string appUri = _configuration.GetValue<string>("OpcUaServer:ApplicationUri") ?? "urn:localhost:GatewayOPC";
                 int port = _configuration.GetValue<int>("OpcUaServer:Port", 4840);
